@@ -195,23 +195,35 @@
     .tool-card-body.open { display:block; }
 
     /* Read-file card — distinct green style */
-    .read-card {
+    .read-card { border: 1px solid color-mix(in srgb, var(--read-color) 25%, transparent); border-radius: var(--radius); overflow: hidden; font-size: 11px; }
+    .read-card-header {
       display: flex;
       align-items: center;
       gap: 8px;
       padding: 6px 10px;
-      border: 1px solid color-mix(in srgb, var(--read-color) 25%, transparent);
-      border-radius: var(--radius);
       background: color-mix(in srgb, var(--read-color) 7%, var(--bg2));
-      font-size: 11px;
       cursor: pointer;
       transition: background 0.15s;
     }
-    .read-card:hover { background: color-mix(in srgb, var(--read-color) 14%, var(--bg2)); }
+    .read-card-header:hover { background: color-mix(in srgb, var(--read-color) 14%, var(--bg2)); }
     .read-card .read-icon { font-size: 13px; flex-shrink: 0; }
-    .read-card .read-label { color: var(--fg-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; }
-    .read-card .read-name { color: var(--read-color); font-family: var(--mono); font-size: 11px; font-weight: 600; }
-    .read-card .read-open { margin-left:auto; color:var(--fg-muted); font-size:10px; }
+    .read-card .read-content { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+    .read-card .read-label { color: var(--fg-muted); font-size: 9px; text-transform: uppercase; letter-spacing: 0.4px; }
+    .read-card .read-name { color: var(--read-color); font-family: var(--mono); font-size: 10px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .read-card .read-open {
+      color: var(--fg-muted); font-size: 10px; cursor: pointer; padding: 2px 6px;
+      border-radius: 4px; transition: all 0.15s; display: flex; align-items: center; gap: 2px;
+    }
+    .read-card .read-open:hover { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+    .read-card .chevron { color: var(--fg-muted); font-size: 8px; transition: transform 0.2s; margin-left: 4px; }
+    .read-card-header.open .chevron { transform: rotate(180deg); }
+    .read-card-body {
+      display: none; padding: 7px 10px;
+      font-family: var(--mono); font-size: 11px; color: var(--fg-muted);
+      background: var(--code-bg); white-space: pre-wrap; word-break: break-all;
+      max-height: 120px; overflow-y: auto; border-top: 1px solid color-mix(in srgb, var(--read-color) 15%, transparent);
+    }
+    .read-card-body.open { display: block; }
 
     /* Write file pill */
     .file-pill {
@@ -624,6 +636,8 @@
     #btn-advanced.active { color: var(--cyan); }
     .diff-card { border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; font-size:11px; margin:2px 0; }
     .diff-header { display:flex; align-items:center; gap:6px; padding:6px 10px; background:color-mix(in srgb, var(--accent) 6%, var(--bg2)); cursor:pointer; user-select:none; }
+    .diff-header .chevron { margin-left:auto; color:var(--fg-muted); font-size:9px; transition:transform 0.2s; }
+    .diff-header.open .chevron { transform:rotate(180deg); }
     .diff-path { font-family:var(--mono); color:var(--blue); flex:1; font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .diff-stats { display:flex; gap:5px; flex-shrink:0; font-size:11px; }
     .diff-add-stat { color:var(--success); }
@@ -649,6 +663,8 @@
     /* ── Terminal output card ── */
     .terminal-card { border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin:2px 0; }
     .terminal-header { display:flex; align-items:center; gap:6px; padding:5px 10px; background:var(--bg3); cursor:pointer; user-select:none; font-size:11px; color:var(--fg-muted); }
+    .terminal-header .chevron { margin-left:auto; color:var(--fg-muted); font-size:9px; transition:transform 0.2s; }
+    .terminal-header.open .chevron { transform:rotate(180deg); }
     .terminal-body { background:#0a0e14; padding:6px 10px; font-family:var(--mono); font-size:11px; max-height:150px; overflow-y:auto; display:none; }
     .terminal-body.open { display:block; }
     .terminal-line { white-space:pre-wrap; padding:1px 0; }
@@ -1262,7 +1278,12 @@ function appendAgentText(text) {
 
 function extractFilePath(args) {
   if (!args) return null;
-  const m = args.match(/"?path"?\s*[=:]\s*"?([^",\n\r}]+)"?/i)
+  try {
+    const p = JSON.parse(args);
+    const path = p.path || p.file_path || p.filePath || p.relative_path || p.target;
+    if (typeof path === 'string') return path.trim();
+  } catch {}
+  const m = args.match(/"?(?:path|file_path|filePath|relative_path|target)"?\s*[=:]\s*"?([^",\n\r}]+)"?/i)
            || args.match(/^([^\s{}"]+\.\w+)/);
   return m ? m[1].trim() : null;
 }
@@ -1276,15 +1297,30 @@ function appendToolCard(toolName, args, oldContent, newContent) {
     const filePath = extractFilePath(args) || toolName;
     const card = document.createElement('div');
     card.className = 'read-card';
-    card.title = 'Click to open file';
-    card.innerHTML = `
+
+    const hdr = document.createElement('div');
+    hdr.className = 'read-card-header';
+    hdr.innerHTML = `
       <span class="read-icon">📂</span>
-      <div style="display:flex;flex-direction:column;gap:1px;min-width:0">
+      <div class="read-content">
         <span class="read-label">Reading file</span>
-        <span class="read-name">${escHtml(filePath)}</span>
+        <span class="read-name" title="${escHtml(filePath)}">${escHtml(filePath)}</span>
       </div>
-      <span class="read-open">↗ open</span>`;
-    card.onclick = () => vscode.postMessage({ type: 'open_file', path: filePath });
+      <div class="read-open" title="Open file">↗ open</div>
+      <span class="chevron">▼</span>`;
+
+    const body = document.createElement('div');
+    body.className = 'read-card-body';
+    body.textContent = args || 'No arguments';
+
+    hdr.onclick = () => { hdr.classList.toggle('open'); body.classList.toggle('open'); };
+    hdr.querySelector('.read-open').onclick = e => {
+      e.stopPropagation();
+      vscode.postMessage({ type: 'open_file', path: filePath });
+    };
+
+    card.appendChild(hdr);
+    card.appendChild(body);
     c.appendChild(card);
     scrollBottom();
     return;
@@ -1299,17 +1335,30 @@ function appendToolCard(toolName, args, oldContent, newContent) {
   }
 
   // ── Generic tool card ──
+  const path = extractFilePath(args);
   const card = document.createElement('div');
   card.className = 'tool-card';
   const hdr = document.createElement('div');
   hdr.className = 'tool-card-header';
-  hdr.innerHTML = `<span>🔧</span><span>${escHtml(toolName)}</span><span class="chevron">▼</span>`;
+  hdr.innerHTML = `
+    <span>🔧</span>
+    <span style="flex:1">${escHtml(toolName)}</span>
+    ${path ? `<div class="read-open" title="Open file" style="margin-right:4px">↗ open</div>` : ''}
+    <span class="chevron">▼</span>`;
+
   const body = document.createElement('div');
   body.className = 'tool-card-body';
   if (args) body.textContent = args;
+  else body.innerHTML = '<span style="color:var(--fg-muted);font-style:italic">No input</span>';
+  
   hdr.onclick = () => { hdr.classList.toggle('open'); body.classList.toggle('open'); };
+  if (path) {
+    const btn = hdr.querySelector('.read-open');
+    if (btn) btn.onclick = e => { e.stopPropagation(); vscode.postMessage({ type: 'open_file', path: path }); };
+  }
+
   card.appendChild(hdr);
-  if (args) card.appendChild(body);
+  card.appendChild(body);
   c.appendChild(card);
   autoScrollBottom();
 }
@@ -1389,14 +1438,14 @@ function appendDiffCard(toolName, rawArgs, oldContent, newContent, filePath) {
     <span class="diff-path">${escHtml(filePath || toolName)}</span>
     ${isNew ? '<span class="diff-new-badge">new file</span>' : `<span class="diff-stats"><span class="diff-add-stat">+${added}</span><span class="diff-del-stat">-${deleted}</span></span>`}
     <button class="diff-open-btn" title="Open file">↗</button>
-    <span style="color:var(--fg-muted);font-size:9px;margin-left:4px">▼</span>`;
+    <span class="chevron">▼</span>`;
   hdr.querySelector('.diff-open-btn').onclick = e => { e.stopPropagation(); vscode.postMessage({ type: 'open_file', path: filePath }); };
 
   const body = document.createElement('div');
   body.className = 'diff-body';
   body.innerHTML = renderDiffHunks(hunks) || `<div class="diff-line"><span style="color:var(--fg-muted)">No changes</span></div>`;
 
-  hdr.onclick = () => { body.classList.toggle('open'); };
+  hdr.onclick = () => { hdr.classList.toggle('open'); body.classList.toggle('open'); };
   card.appendChild(hdr);
   card.appendChild(body);
   c.appendChild(card);
@@ -1445,10 +1494,10 @@ function appendTerminalLine(text) {
     currentTerminalCard.className = 'terminal-card';
     const hdr = document.createElement('div');
     hdr.className = 'terminal-header';
-    hdr.innerHTML = `<span>>_</span><span style="flex:1">Terminal output</span><span style="font-size:9px">▼</span>`;
+    hdr.innerHTML = `<span>>_</span><span style="flex:1">Terminal output</span><span class="chevron">▼</span>`;
     currentTerminalBody = document.createElement('div');
-    currentTerminalBody.className = 'terminal-body open';
-    hdr.onclick = () => currentTerminalBody.classList.toggle('open');
+    currentTerminalBody.className = 'terminal-body'; // starts collapsed
+    hdr.onclick = () => { hdr.classList.toggle('open'); currentTerminalBody.classList.toggle('open'); };
     currentTerminalCard.appendChild(hdr);
     currentTerminalCard.appendChild(currentTerminalBody);
     c.appendChild(currentTerminalCard);

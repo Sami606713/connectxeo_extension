@@ -248,7 +248,6 @@ export class ChatPanel {
         this.postMessage({ type: 'agent_message', message: msg });
       });
       this.runner.on('debug', (line: string) => this.outputChannel.appendLine(line));
-      this.outputChannel.show(true);
     }
     return this.runner;
   }
