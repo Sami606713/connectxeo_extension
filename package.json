@@ -1,0 +1,112 @@
+{
+  "name": "deep-agent",
+  "displayName": "Deep Agent",
+  "description": "AI coding agent powered by Deep Agents CLI and local Ollama models",
+  "version": "0.1.0",
+  "publisher": "Sami Ullah",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "icon": "resources/icon.png",
+  "contributes": {
+    "commands": [
+      {
+        "command": "ollamaDeepAgent.openChat",
+        "title": "Open Ollama Deep Agent Chat",
+        "icon": "$(robot)"
+      },
+      {
+        "command": "ollamaDeepAgent.newSession",
+        "title": "Ollama Deep Agent: New Session"
+      },
+      {
+        "command": "ollamaDeepAgent.stopAgent",
+        "title": "Ollama Deep Agent: Stop Agent"
+      },
+      {
+        "command": "ollamaDeepAgent.selectModel",
+        "title": "Deep Agent: Select Model"
+      },
+      {
+        "command": "ollamaDeepAgent.sendSelection",
+        "title": "Deep Agent: Ask About Selection"
+      }
+    ],
+    "configuration": {
+      "title": "Ollama Deep Agent",
+      "properties": {
+        "ollamaDeepAgent.ollamaBaseUrl": {
+          "type": "string",
+          "default": "http://localhost:11434",
+          "description": "Ollama API base URL"
+        },
+        "ollamaDeepAgent.defaultModel": {
+          "type": "string",
+          "default": "qwen2.5-coder:7b",
+          "description": "Default Ollama model to use"
+        },
+        "ollamaDeepAgent.deepagentsPath": {
+          "type": "string",
+          "default": "deepagents",
+          "description": "Path to deepagents CLI binary"
+        },
+        "ollamaDeepAgent.autoApproveTools": {
+          "type": "boolean",
+          "default": false,
+          "description": "Auto-approve tool calls without confirmation"
+        },
+        "ollamaDeepAgent.tavilyApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Tavily API key for web search (get one free at tavily.com)"
+        }
+      }
+    },
+    "keybindings": [
+      {
+        "command": "ollamaDeepAgent.openChat",
+        "key": "ctrl+shift+o",
+        "mac": "cmd+shift+o"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "ollamaDeepAgent.openChat",
+          "group": "deepagent@1"
+        },
+        {
+          "command": "ollamaDeepAgent.sendSelection",
+          "group": "deepagent@2",
+          "when": "editorHasSelection"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "node-pty": "^1.0.0",
+    "ollama": "^0.6.3"
+  }
+}

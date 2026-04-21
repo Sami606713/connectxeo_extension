@@ -1,0 +1,1745 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';" />
+  <title>Deep Agent</title>
+  <style>
+    :root {
+      --bg:        var(--vscode-sideBar-background, #030710);
+      --bg2:       var(--vscode-input-background, #0a0f1a);
+      --bg3:       var(--vscode-editorWidget-background, #111827);
+      --border:    var(--vscode-panel-border, #1e2533);
+      --fg:        var(--vscode-foreground, #e6edf3);
+      --fg-muted:  var(--vscode-descriptionForeground, #7d8590);
+      --accent:    #7FC8FF;
+      --accent2:   #5AB3F5;
+      --accent-fg: #fff;
+      --error:     var(--vscode-errorForeground, #f85149);
+      --success:   #3fb950;
+      --warn:      #d29922;
+      --blue:      #7FC8FF;
+      --cyan:      #93D5FF;
+      --read-color:#56d364;
+      --code-bg:   #030710;
+      --radius:    6px;
+      --font:      var(--vscode-font-family, 'Segoe UI', sans-serif);
+      --mono:      var(--vscode-editor-font-family, 'Consolas', monospace);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font);
+      font-size: 13px;
+      color: var(--fg);
+      background: var(--bg);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    #header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      background: var(--bg);
+    }
+
+    /* Logo mark */
+    .logo-mark {
+      width: 28px;
+      height: 28px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .logo-mark svg { width: 28px; height: 28px; }
+
+    .header-name {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: -0.3px;
+      background: linear-gradient(120deg, #93D5FF, #7FC8FF);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      flex: 1;
+    }
+
+    #status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: #333;
+      flex-shrink: 0;
+    }
+    #status-dot.online  { background: var(--success); box-shadow: 0 0 4px var(--success); }
+    #status-dot.offline { background: var(--error); }
+
+    /* New session button — top right */
+    #btn-new-session {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--fg-muted);
+      font-size: 11px;
+      cursor: pointer;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-family: var(--font);
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s;
+    }
+    #btn-new-session:hover {
+      color: var(--fg);
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 8%, transparent);
+    }
+
+    /* ── Compact dropdowns inside input box ── */
+    .input-select {
+      background: var(--bg3);
+      color: var(--fg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 3px 6px;
+      font-size: 11px;
+      font-family: var(--font);
+      cursor: pointer;
+      height: 24px;
+      max-width: 130px;
+    }
+    .input-select:focus { outline: 1px solid var(--accent); }
+    #mode-select { max-width: 90px; }
+    #model-select { flex: 1; max-width: none; font-family: var(--mono); }
+    #btn-refresh-models {
+      background: none; border: none;
+      color: var(--fg-muted); cursor: pointer;
+      padding: 2px 4px; border-radius: 4px; font-size: 12px; height: 24px;
+    }
+    #btn-refresh-models:hover { color: var(--fg); background: var(--border); }
+
+    /* ── Offline banner ── */
+    #offline-banner {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      background: color-mix(in srgb, var(--error) 10%, var(--bg2));
+      border-bottom: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
+      font-size: 11px;
+      color: var(--error);
+      flex-shrink: 0;
+    }
+
+    /* ── Messages ── */
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    #messages::-webkit-scrollbar { width: 4px; }
+    #messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; } }
+
+    /* User message */
+    .msg-user { display:flex; flex-direction:column; gap:3px; animation:fadeIn 0.15s ease; }
+    .msg-user .role { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:var(--accent); }
+    .msg-user .bubble {
+      background: color-mix(in srgb, var(--accent) 10%, var(--bg2));
+      border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+      border-radius: var(--radius);
+      padding: 9px 11px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* Agent turn */
+    .msg-agent { display:flex; flex-direction:column; gap:5px; animation:fadeIn 0.15s ease; }
+    .msg-agent .role { font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; color:var(--success); }
+    .agent-content { display:flex; flex-direction:column; gap:5px; }
+    .agent-text { line-height:1.6; white-space:pre-wrap; word-break:break-word; }
+    .error-text { line-height:1.6; white-space:pre-wrap; word-break:break-word; color:var(--error); }
+
+    /* Tool card — write/edit (amber) */
+    .tool-card { border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; font-size:11px; }
+    .tool-card-header {
+      display:flex; align-items:center; gap:6px;
+      padding:5px 10px;
+      background: color-mix(in srgb, var(--warn) 8%, var(--bg2));
+      color:var(--warn); font-weight:600; cursor:pointer; user-select:none;
+    }
+    .tool-card-header .chevron { margin-left:auto; color:var(--fg-muted); font-size:9px; transition:transform 0.2s; }
+    .tool-card-header.open .chevron { transform:rotate(180deg); }
+    .tool-card-body {
+      display:none; padding:7px 10px;
+      font-family:var(--mono); font-size:11px; color:var(--fg-muted);
+      background:var(--code-bg); white-space:pre-wrap; word-break:break-all;
+      max-height:90px; overflow-y:auto;
+    }
+    .tool-card-body.open { display:block; }
+
+    /* Read-file card — distinct green style */
+    .read-card {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      border: 1px solid color-mix(in srgb, var(--read-color) 25%, transparent);
+      border-radius: var(--radius);
+      background: color-mix(in srgb, var(--read-color) 7%, var(--bg2));
+      font-size: 11px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .read-card:hover { background: color-mix(in srgb, var(--read-color) 14%, var(--bg2)); }
+    .read-card .read-icon { font-size: 13px; flex-shrink: 0; }
+    .read-card .read-label { color: var(--fg-muted); font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; }
+    .read-card .read-name { color: var(--read-color); font-family: var(--mono); font-size: 11px; font-weight: 600; }
+    .read-card .read-open { margin-left:auto; color:var(--fg-muted); font-size:10px; }
+
+    /* Write file pill */
+    .file-pill {
+      display:inline-flex; align-items:center; gap:4px;
+      background: color-mix(in srgb, var(--blue) 10%, var(--bg2));
+      border:1px solid color-mix(in srgb, var(--blue) 22%, transparent);
+      color:var(--blue); border-radius:4px; padding:3px 8px;
+      font-size:11px; font-family:var(--mono); cursor:pointer; margin:4px 10px;
+      width: fit-content;
+    }
+    .file-pill:hover { background: color-mix(in srgb, var(--blue) 18%, var(--bg2)); }
+
+    /* Plan cards */
+    .plan-container {
+      border:1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+      border-radius:var(--radius); overflow:hidden; animation:fadeIn 0.2s ease;
+    }
+    .plan-header {
+      display:flex; align-items:center; gap:8px; padding:8px 12px;
+      background: color-mix(in srgb, var(--accent) 10%, var(--bg2));
+      border-bottom:1px solid color-mix(in srgb, var(--accent) 20%, transparent);
+      font-weight:600; font-size:12px; color:var(--accent);
+    }
+    .plan-steps { display:flex; flex-direction:column; }
+    .plan-step {
+      display:flex; align-items:flex-start; gap:10px;
+      padding:7px 12px; border-bottom:1px solid var(--border);
+      font-size:12px; line-height:1.4; transition:background 0.2s;
+    }
+    .plan-step:last-child { border-bottom:none; }
+    .plan-step.completed { opacity:0.5; }
+    .plan-step.in_progress { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+    .step-icon { font-size:12px; flex-shrink:0; margin-top:1px; width:14px; text-align:center; }
+    .step-icon.running { animation:spin 0.8s linear infinite; display:inline-block; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .step-text.done { text-decoration:line-through; color:var(--fg-muted); }
+
+    .plan-progress { padding:6px 12px; background:var(--bg2); border-top:1px solid var(--border); }
+    .progress-track { height:3px; background:var(--border); border-radius:2px; overflow:hidden; }
+    .progress-fill { height:100%; background:linear-gradient(90deg, var(--accent), var(--blue)); border-radius:2px; transition:width 0.4s ease; }
+    .progress-label { font-size:10px; color:var(--fg-muted); margin-top:4px; }
+
+    .plan-actions { display:flex; align-items:center; gap:6px; padding:8px 12px; background:var(--bg2); border-top:1px solid var(--border); }
+    .plan-md-btn {
+      margin-left:auto; background:none; border:none;
+      color:var(--fg-muted); font-size:10px; cursor:pointer;
+      padding:2px 6px; border-radius:4px; font-family:var(--font);
+    }
+    .plan-md-btn:hover { color:var(--cyan); background:color-mix(in srgb, var(--cyan) 10%, transparent); }
+    .btn { padding:5px 13px; border-radius:6px; border:none; font-size:11px; font-family:var(--font); cursor:pointer; display:flex; align-items:center; gap:4px; }
+    .btn-primary { background:linear-gradient(135deg, var(--accent), var(--accent2)); color:#fff; font-weight:600; }
+    .btn-primary:hover { opacity:0.88; }
+    .btn-secondary { background:var(--bg3); color:var(--fg); border:1px solid var(--border); }
+    .btn-secondary:hover { background:var(--border); }
+    .btn-danger { background: color-mix(in srgb, var(--error) 20%, var(--bg3)); color:var(--error); border:1px solid color-mix(in srgb, var(--error) 25%, transparent); }
+    .btn-danger:hover { background: color-mix(in srgb, var(--error) 30%, var(--bg3)); }
+
+    /* ── Setup banner ── */
+    #setup-banner {
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+      padding: 10px 12px;
+      background: color-mix(in srgb, var(--warn) 8%, var(--bg2));
+      border-bottom: 1px solid color-mix(in srgb, var(--warn) 25%, transparent);
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+    #setup-banner.visible { display: flex; }
+    #setup-banner .setup-title { font-weight: 700; color: var(--warn); font-size: 12px; }
+    #setup-banner .setup-step { color: var(--fg-muted); display: flex; gap: 6px; }
+    #setup-banner .setup-step code {
+      font-family: var(--mono); color: var(--cyan);
+      background: var(--code-bg); padding: 1px 5px; border-radius: 3px;
+    }
+    #setup-banner .setup-dismiss {
+      background: none; border: 1px solid var(--border); color: var(--fg-muted);
+      font-size: 10px; cursor: pointer; padding: 2px 8px; border-radius: 4px;
+      align-self: flex-start; font-family: var(--font); margin-top: 2px;
+    }
+    #setup-banner .setup-dismiss:hover { color: var(--fg); }
+
+    /* Copy button on messages */
+    .msg-agent { position: relative; }
+    .copy-btn {
+      position: absolute; top: 0; right: 0;
+      background: var(--bg3); border: 1px solid var(--border);
+      color: var(--fg-muted); font-size: 10px; cursor: pointer;
+      padding: 2px 6px; border-radius: 4px; font-family: var(--font);
+      opacity: 0; transition: opacity 0.15s;
+    }
+    .msg-agent:hover .copy-btn { opacity: 1; }
+    .copy-btn:hover { color: var(--fg); background: var(--border); }
+    .copy-btn.copied { color: var(--success); border-color: var(--success); }
+
+    /* Timer badge */
+    .timer-badge {
+      font-size: 10px; color: var(--fg-muted);
+      margin-left: 6px; font-weight: 400;
+    }
+
+    /* Scroll-to-bottom button */
+    #scroll-btn {
+      position: fixed; bottom: 100px; right: 14px;
+      width: 28px; height: 28px; border-radius: 50%;
+      background: var(--bg3); border: 1px solid var(--border);
+      color: var(--fg-muted); cursor: pointer; font-size: 13px;
+      display: none; align-items: center; justify-content: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+      transition: opacity 0.2s;
+      z-index: 10;
+    }
+    #scroll-btn:hover { color: var(--fg); background: var(--border); }
+
+    /* Selected-code context bar */
+    #ctx-bar {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 10px;
+      background: color-mix(in srgb, var(--cyan) 7%, var(--bg2));
+      border-bottom: 1px solid color-mix(in srgb, var(--cyan) 20%, transparent);
+      font-size: 11px;
+      color: var(--cyan);
+      flex-shrink: 0;
+    }
+    #ctx-bar.visible { display: flex; }
+    #ctx-bar .ctx-name { font-family: var(--mono); }
+    #ctx-bar .ctx-clear { margin-left:auto; background:none; border:none; color:var(--fg-muted); cursor:pointer; font-size:12px; padding:0 2px; }
+
+    /* Thinking dots */
+    .thinking-row { display:flex; align-items:center; gap:8px; color:var(--fg-muted); font-size:12px; font-style:italic; padding:2px 0; }
+    .dots span { display:inline-block; width:4px; height:4px; border-radius:50%; background:var(--accent); animation:bounce 1.2s infinite; }
+    .dots span:nth-child(2) { animation-delay:0.2s; }
+    .dots span:nth-child(3) { animation-delay:0.4s; }
+    @keyframes bounce { 0%,80%,100%{transform:translateY(0);opacity:0.3;} 40%{transform:translateY(-4px);opacity:1;} }
+
+    /* Empty state */
+    #empty-state {
+      display:flex; flex-direction:column; align-items:center;
+      justify-content:center; flex:1; gap:10px;
+      color:var(--fg-muted); text-align:center; padding:20px 16px;
+    }
+    #empty-state .empty-logo { margin-bottom:4px; }
+    #empty-state .tagline { font-size:13px; font-weight:600; color:var(--fg); }
+    #empty-state .hint { font-size:11px; line-height:1.6; max-width:240px; }
+    .suggestions { display:flex; flex-direction:column; gap:5px; width:100%; margin-top:8px; }
+    .suggestion-btn {
+      background:var(--bg2); border:1px solid var(--border); color:var(--fg);
+      border-radius:var(--radius); padding:7px 11px; font-size:11px;
+      cursor:pointer; text-align:left; font-family:var(--font);
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .suggestion-btn:hover { background:var(--bg3); border-color:var(--accent); }
+
+    /* ── Input area ── */
+    #input-area {
+      border-top: 1px solid var(--border);
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      flex-shrink: 0;
+      background: var(--bg);
+    }
+
+    /* Input box wrapper */
+    .input-box {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      overflow: hidden;
+      transition: border-color 0.15s;
+      margin: 8px 10px 6px;
+    }
+    .input-box:focus-within { border-color: var(--accent); }
+
+    #prompt-input {
+      background: transparent;
+      color: var(--fg);
+      border: none;
+      padding: 10px 14px 6px;
+      font-size: 13px;
+      font-family: var(--font);
+      resize: none;
+      min-height: 40px;
+      max-height: 140px;
+      line-height: 1.5;
+      overflow-y: auto;
+      outline: none;
+      width: 100%;
+    }
+    #prompt-input::placeholder { color: var(--fg-muted); }
+
+    /* Bottom toolbar inside input box — Claude Code style */
+    .input-toolbar {
+      display: flex;
+      align-items: center;
+      padding: 5px 8px 7px;
+      gap: 4px;
+      border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+    }
+
+    /* Left side: action buttons + file pills */
+    .toolbar-left {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      flex: 1;
+      min-width: 0;
+      overflow-x: auto;
+    }
+    .toolbar-left::-webkit-scrollbar { height: 0; }
+
+    /* Right side: mode, model, send */
+    .toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+
+    /* Small round icon buttons in toolbar */
+    .tb-icon-btn {
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--fg-muted);
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.15s;
+      padding: 0;
+    }
+    .tb-icon-btn:hover {
+      color: var(--fg);
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 8%, transparent);
+    }
+
+    /* Inline file pills in toolbar */
+    .tb-file-pills {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 1;
+      min-width: 0;
+      overflow-x: auto;
+    }
+    .tb-file-pills::-webkit-scrollbar { height: 0; }
+
+    .tb-file-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      background: color-mix(in srgb, var(--accent) 8%, var(--bg3));
+      border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+      color: var(--fg);
+      border-radius: 5px;
+      padding: 2px 7px;
+      font-size: 11px;
+      font-family: var(--mono);
+      white-space: nowrap;
+      flex-shrink: 0;
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tb-file-pill .pill-icon {
+      font-size: 11px;
+      color: var(--fg-muted);
+      flex-shrink: 0;
+    }
+    .tb-file-pill .pill-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tb-file-pill .pill-close {
+      background: none;
+      border: none;
+      color: var(--fg-muted);
+      cursor: pointer;
+      font-size: 10px;
+      padding: 0 1px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .tb-file-pill .pill-close:hover { color: var(--error); }
+
+    /* Context size warning */
+    .tb-ctx-warn {
+      color: var(--warn);
+      font-size: 10px;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+
+    /* Compact mode toggle button */
+    .tb-mode-btn {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--fg-muted);
+      font-size: 11px;
+      font-family: var(--font);
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: all 0.15s;
+    }
+    .tb-mode-btn:hover {
+      color: var(--fg);
+      border-color: var(--accent);
+    }
+    .tb-mode-btn.active {
+      color: var(--accent);
+      border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+      background: color-mix(in srgb, var(--accent) 8%, transparent);
+    }
+
+    /* Compact model selector — looks like a label, acts as dropdown */
+    .tb-model-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+    }
+    .tb-model-label {
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      padding: 3px 6px;
+      border-radius: 6px;
+      color: var(--fg-muted);
+      font-size: 11px;
+      font-family: var(--mono);
+      cursor: pointer;
+      white-space: nowrap;
+      max-width: 120px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: color 0.15s;
+    }
+    .tb-model-label:hover { color: var(--accent); }
+    .tb-model-label .chevron-sm { font-size: 8px; color: var(--fg-muted); }
+
+    /* Hidden native select over model label */
+    .tb-model-select {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      font-size: 11px;
+    }
+
+    /* Send / Stop buttons — compact */
+    #btn-send, #btn-stop {
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      border: none; cursor: pointer;
+      font-size: 14px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: opacity 0.15s;
+    }
+    #btn-send { background:linear-gradient(135deg, var(--accent), var(--accent2)); color:#fff; }
+    #btn-send:hover { opacity:0.85; }
+    #btn-send:disabled { opacity:0.3; cursor:not-allowed; }
+    #btn-stop { background: color-mix(in srgb, var(--error) 20%, var(--bg3)); color:var(--error); display:none; border:1px solid color-mix(in srgb, var(--error) 25%, transparent); }
+    #btn-stop:hover { opacity:0.85; }
+
+    #input-hint { font-size:10px; color:var(--fg-muted); text-align:center; padding: 0 10px 6px; }
+
+    /* ── Old selects (hidden, used by model popup) ── */
+    .input-select {
+      background: var(--bg3);
+      color: var(--fg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 3px 6px;
+      font-size: 11px;
+      font-family: var(--font);
+      cursor: pointer;
+      height: 24px;
+      max-width: 130px;
+    }
+    .input-select:focus { outline: 1px solid var(--accent); }
+    #mode-select { display: none; }
+    #model-select { display: none; }
+    #btn-refresh-models { display: none; }
+
+    /* ── Compact dropdown inside input box ── */
+    #btn-advanced {
+      background: none; border: none; color: var(--fg-muted); cursor: pointer;
+      font-size: 11px; padding: 2px 5px; border-radius: 4px; font-family: var(--font);
+      display: flex; align-items: center; gap: 3px;
+    }
+    #btn-advanced:hover { color: var(--fg); background: var(--border); }
+    #btn-advanced.active { color: var(--cyan); }
+    .diff-card { border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; font-size:11px; margin:2px 0; }
+    .diff-header { display:flex; align-items:center; gap:6px; padding:6px 10px; background:color-mix(in srgb, var(--accent) 6%, var(--bg2)); cursor:pointer; user-select:none; }
+    .diff-path { font-family:var(--mono); color:var(--blue); flex:1; font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .diff-stats { display:flex; gap:5px; flex-shrink:0; font-size:11px; }
+    .diff-add-stat { color:var(--success); }
+    .diff-del-stat { color:var(--error); }
+    .diff-body { max-height:200px; overflow-y:auto; background:var(--code-bg); display:none; }
+    .diff-body.open { display:block; }
+    .diff-line { padding:0 8px; font-family:var(--mono); font-size:11px; white-space:pre; display:flex; gap:6px; }
+    .diff-line-add { background:#1a3a1a; }
+    .diff-line-del { background:#3a1a1a; }
+    .diff-prefix { user-select:none; flex-shrink:0; width:10px; }
+    .diff-open-btn { background:none; border:none; color:var(--fg-muted); font-size:10px; cursor:pointer; padding:2px 6px; white-space:nowrap; }
+    .diff-open-btn:hover { color:var(--accent); }
+    .diff-new-badge { font-size:10px; color:var(--success); background:color-mix(in srgb, var(--success) 12%, transparent); padding:1px 5px; border-radius:3px; }
+
+    /* ── Approval card ── */
+    .approval-card { border:1px solid color-mix(in srgb, var(--warn) 40%, transparent); border-radius:var(--radius); overflow:hidden; margin:2px 0; }
+    .approval-header { display:flex; align-items:center; gap:6px; padding:6px 10px; background:color-mix(in srgb, var(--warn) 10%, var(--bg2)); }
+    .approval-tool { font-family:var(--mono); color:var(--warn); font-weight:600; flex:1; font-size:11px; }
+    .approval-badge { font-size:10px; color:var(--warn); background:color-mix(in srgb, var(--warn) 15%, transparent); padding:1px 6px; border-radius:3px; flex-shrink:0; }
+    .approval-body { padding:5px 10px; font-family:var(--mono); font-size:11px; color:var(--fg-muted); background:var(--code-bg); max-height:60px; overflow-y:auto; white-space:pre-wrap; }
+    .approval-actions { display:flex; gap:6px; padding:7px 10px; background:var(--bg2); border-top:1px solid var(--border); }
+
+    /* ── Terminal output card ── */
+    .terminal-card { border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; margin:2px 0; }
+    .terminal-header { display:flex; align-items:center; gap:6px; padding:5px 10px; background:var(--bg3); cursor:pointer; user-select:none; font-size:11px; color:var(--fg-muted); }
+    .terminal-body { background:#0a0e14; padding:6px 10px; font-family:var(--mono); font-size:11px; max-height:150px; overflow-y:auto; display:none; }
+    .terminal-body.open { display:block; }
+    .terminal-line { white-space:pre-wrap; padding:1px 0; }
+    .terminal-line.pass { color:var(--success); }
+    .terminal-line.fail { color:var(--error); }
+    .terminal-line.warn { color:var(--warn); }
+
+    /* ── Session picker overlay ── */
+    #session-overlay { display:none; position:fixed; inset:0; z-index:20; background:rgba(13,17,23,0.92); flex-direction:column; padding:16px 12px; gap:8px; }
+    #session-overlay.open { display:flex; }
+    .session-overlay-header { display:flex; align-items:center; gap:8px; }
+    .session-overlay-title { font-size:13px; font-weight:600; color:var(--fg); flex:1; }
+    .session-overlay-close { background:none; border:none; color:var(--fg-muted); font-size:16px; cursor:pointer; padding:0 4px; }
+    .session-list { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:4px; }
+    .session-item { padding:8px 10px; border:1px solid var(--border); border-radius:var(--radius); cursor:pointer; background:var(--bg2); transition:border-color 0.15s; }
+    .session-item:hover { border-color:var(--accent); background:var(--bg3); }
+    .session-id { font-family:var(--mono); font-size:11px; color:var(--blue); }
+    .session-date { font-size:10px; color:var(--fg-muted); margin-top:2px; }
+    .session-snippet { font-size:11px; color:var(--fg); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .session-empty { color:var(--fg-muted); font-size:12px; text-align:center; padding:20px 0; }
+
+    /* ── Resume badge in input ── */
+    #resume-badge { display:none; align-items:center; gap:5px; padding:3px 8px; background:color-mix(in srgb, var(--cyan) 10%, var(--bg2)); border:1px solid color-mix(in srgb, var(--cyan) 25%, transparent); border-radius:5px; font-size:11px; color:var(--cyan); }
+    #resume-badge.visible { display:flex; }
+    #resume-badge button { background:none; border:none; color:var(--fg-muted); cursor:pointer; font-size:11px; padding:0 2px; }
+
+    /* ── Shell preset chips ── */
+    .preset-chip { display:inline-flex; align-items:center; gap:4px; padding:3px 9px; background:var(--bg3); border:1px solid var(--border); border-radius:12px; font-size:11px; cursor:pointer; user-select:none; transition:all 0.15s; }
+    .preset-chip:has(input:checked) { background:color-mix(in srgb, var(--accent) 12%, var(--bg2)); border-color:color-mix(in srgb, var(--accent) 40%, transparent); color:var(--blue); }
+    .preset-chip input { display:none; }
+
+    /* ── Multi-file context pills ── */
+    .ctx-file-pill { display:inline-flex; align-items:center; gap:3px; background:color-mix(in srgb, var(--cyan) 10%, var(--bg2)); border:1px solid color-mix(in srgb, var(--cyan) 22%, transparent); color:var(--cyan); border-radius:4px; padding:1px 6px; font-size:11px; font-family:var(--mono); }
+    .ctx-file-pill button { background:none; border:none; color:var(--fg-muted); cursor:pointer; font-size:11px; padding:0 1px; line-height:1; }
+    .ctx-file-pill button:hover { color:var(--error); }
+    #btn-add-ctx { background:none; border:1px solid var(--border); color:var(--fg-muted); font-size:10px; cursor:pointer; padding:2px 6px; border-radius:4px; font-family:var(--font); white-space:nowrap; }
+    #btn-add-ctx:hover { color:var(--fg); border-color:var(--accent); }
+
+
+    #advanced-panel {
+      display: none;
+      flex-direction: column;
+      gap: 7px;
+      padding: 8px 10px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-top: -2px;
+    }
+    #advanced-panel.open { display: flex; }
+
+    .adv-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .adv-label { font-size: 11px; color: var(--fg-muted); min-width: 78px; flex-shrink: 0; }
+
+    .adv-toggle {
+      position: relative; display: inline-flex; align-items: center;
+      width: 30px; height: 16px; cursor: pointer; flex-shrink: 0;
+    }
+    .adv-toggle input { opacity: 0; width: 0; height: 0; }
+    .adv-toggle-track {
+      position: absolute; inset: 0; border-radius: 8px;
+      background: var(--border); transition: background 0.2s;
+    }
+    .adv-toggle input:checked ~ .adv-toggle-track { background: var(--cyan); }
+    .adv-toggle-thumb {
+      position: absolute; width: 12px; height: 12px; border-radius: 50%;
+      background: #fff; top: 2px; left: 2px; transition: transform 0.2s;
+    }
+    .adv-toggle input:checked ~ .adv-toggle-thumb { transform: translateX(14px); }
+
+    .adv-input {
+      background: var(--bg3); color: var(--fg); border: 1px solid var(--border);
+      border-radius: 5px; padding: 3px 7px; font-size: 11px; font-family: var(--font);
+      height: 24px; flex: 1; min-width: 0;
+    }
+    .adv-input:focus { outline: 1px solid var(--accent); }
+    .adv-input::placeholder { color: var(--fg-muted); }
+    .adv-input-sm { max-width: 58px; flex: none; }
+
+    .adv-tag-wrap {
+      display: flex; flex-wrap: wrap; gap: 4px; flex: 1;
+      background: var(--bg3); border: 1px solid var(--border);
+      border-radius: 5px; padding: 3px 6px; min-height: 28px; align-items: center;
+      cursor: text;
+    }
+    .adv-tag-wrap:focus-within { outline: 1px solid var(--accent); }
+    .adv-tag {
+      display: inline-flex; align-items: center; gap: 3px;
+      background: color-mix(in srgb, var(--accent) 12%, var(--bg2));
+      border: 1px solid color-mix(in srgb, var(--accent) 25%, transparent);
+      color: var(--blue); border-radius: 4px; padding: 1px 6px; font-size: 11px;
+    }
+    .adv-tag button {
+      background: none; border: none; color: var(--fg-muted); cursor: pointer;
+      font-size: 11px; padding: 0 1px; line-height: 1;
+    }
+    .adv-tag button:hover { color: var(--error); }
+    .adv-tag-input {
+      background: none; border: none; outline: none; color: var(--fg);
+      font-size: 11px; font-family: var(--font); min-width: 70px; flex: 1;
+    }
+
+    .adv-hint { font-size: 10px; color: var(--fg-muted); }
+    .adv-sep { height: 1px; background: var(--border); margin: 1px 0; }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div id="header">
+  <div class="logo-mark">
+    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="lg1" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stop-color="#93D5FF"/>
+          <stop offset="100%" stop-color="#7FC8FF"/>
+        </linearGradient>
+      </defs>
+      <path d="M16 2 L28 9 L28 23 L16 30 L4 23 L4 9 Z" fill="none" stroke="url(#lg1)" stroke-width="1.5"/>
+      <path d="M16 7 L24 11.5 L24 20.5 L16 25 L8 20.5 L8 11.5 Z" fill="none" stroke="url(#lg1)" stroke-width="1" opacity="0.5"/>
+      <path d="M12 12 L20 20 M20 12 L12 20" stroke="url(#lg1)" stroke-width="2" stroke-linecap="round"/>
+    </svg>
+  </div>
+  <span class="header-name">Deep Agent</span>
+  <div id="status-dot" title="Ollama status"></div>
+  <button id="btn-history" title="Session history" style="background:none;border:1px solid var(--border);color:var(--fg-muted);font-size:11px;cursor:pointer;padding:3px 7px;border-radius:6px;font-family:var(--font);" onclick="openSessionPicker()">🕓</button>
+  <button id="btn-new-session" title="Start new session">⊕ New</button>
+</div>
+
+<!-- Offline banner -->
+<div id="offline-banner">⚠ <span id="offline-msg">Ollama offline — start Ollama first</span></div>
+
+<!-- Setup guide banner (shown when deepagents not installed) -->
+<div id="setup-banner">
+  <div class="setup-title">⚙ First-time setup required</div>
+  <div class="setup-step"><span>1.</span><span>Install deepagents: <code>uv tool install 'deepagents-cli[ollama]'</code></span></div>
+  <div class="setup-step"><span>2.</span><span>Start Ollama: <code>ollama serve</code></span></div>
+  <div class="setup-step"><span>3.</span><span>Pull a model: <code>ollama pull qwen2.5-coder:7b</code></span></div>
+  <button class="setup-dismiss" onclick="dismissSetup()">Got it, dismiss</button>
+</div>
+
+<!-- Selected code context bar -->
+<div id="ctx-bar">
+  <span style="color:var(--fg-muted);font-size:11px;flex-shrink:0">📎</span>
+  <div id="ctx-files" style="display:flex;flex-wrap:wrap;gap:4px;flex:1;min-width:0"></div>
+  <button id="btn-add-ctx" onclick="vscode.postMessage({type:'pick_context_files'})" title="Add files to context">+ files</button>
+  <button class="ctx-clear" onclick="clearAllContext()" title="Clear all context">✕</button>
+</div>
+
+<!-- Session history overlay (shown over messages area) -->
+<div id="session-overlay">
+  <div class="session-overlay-header">
+    <span class="session-overlay-title">🕓 Session History</span>
+    <button class="session-overlay-close" onclick="closeSessionPicker()">✕</button>
+  </div>
+  <div class="session-list" id="session-list"></div>
+</div>
+
+<!-- Scroll to bottom -->
+<button id="scroll-btn" onclick="scrollBottom()" title="Scroll to bottom">↓</button>
+
+<!-- Messages -->
+<div id="messages">
+  <div id="empty-state">
+    <div class="empty-logo">
+      <svg width="52" height="52" viewBox="0 0 32 32" fill="none">
+        <defs>
+          <linearGradient id="elg" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#93D5FF"/>
+            <stop offset="100%" stop-color="#7FC8FF"/>
+          </linearGradient>
+        </defs>
+        <path d="M16 2 L28 9 L28 23 L16 30 L4 23 L4 9 Z" fill="none" stroke="url(#elg)" stroke-width="1.5" opacity="0.7"/>
+        <path d="M16 7 L24 11.5 L24 20.5 L16 25 L8 20.5 L8 11.5 Z" fill="none" stroke="url(#elg)" stroke-width="1" opacity="0.35"/>
+        <path d="M12 12 L20 20 M20 12 L12 20" stroke="url(#elg)" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+    </div>
+    <div class="tagline">Deep Agent</div>
+    <div class="hint">Your local AI coding assistant.<br/>Use <strong>Plan</strong> mode for complex tasks.</div>
+    <div class="suggestions">
+      <button class="suggestion-btn" onclick="runTemplate('Explain the overall structure of this project including all files, folders, and their purpose.')">📁 Explain project structure</button>
+      <button class="suggestion-btn" onclick="runTemplate('Find and fix any bugs in the current workspace files. Show what was wrong and what you changed.')">🐛 Find and fix bugs</button>
+      <button class="suggestion-btn" onclick="runTemplate('Write comprehensive unit tests for the main functions in this project.')">🧪 Write unit tests</button>
+      <button class="suggestion-btn" onclick="runTemplate('Refactor the code to be cleaner, more readable, and follow best practices.')">✨ Refactor code</button>
+      <button class="suggestion-btn" onclick="runTemplate('Review the code for security vulnerabilities and suggest fixes.')">🔒 Security review</button>
+      <button class="suggestion-btn" onclick="runTemplate('Generate documentation (README and inline comments) for this project.')">📝 Generate docs</button>
+    </div>
+  </div>
+</div>
+
+<!-- Input area -->
+<div id="input-area">
+  <div class="input-box">
+    <textarea id="prompt-input" rows="1" placeholder="Ask Deep Agent anything..."></textarea>
+    <div class="input-toolbar">
+      <!-- Left: action buttons + file pills -->
+      <div class="toolbar-left">
+        <button class="tb-icon-btn" id="btn-attach" title="Attach files" onclick="vscode.postMessage({type:'pick_context_files'})">+</button>
+        <button class="tb-icon-btn" id="btn-code-ctx" title="Add code from editor" onclick="addEditorSelection()" style="font-size:12px">&lt;/&gt;</button>
+        <div class="tb-file-pills" id="tb-pills"></div>
+      </div>
+      <!-- Right: mode, model, advanced, send -->
+      <div class="toolbar-right">
+        <button class="tb-mode-btn active" id="tb-mode" title="Toggle mode" onclick="toggleMode()">⚡ Fast</button>
+        <div class="tb-model-wrap">
+          <span class="tb-model-label" id="tb-model-label" title="Change model">model <span class="chevron-sm">▾</span></span>
+          <select class="tb-model-select" id="model-select" title="Select model"></select>
+        </div>
+        <button class="tb-icon-btn" id="btn-refresh-models" title="Refresh models" onclick="vscode.postMessage({type:'refresh_models'})" style="font-size:11px">↻</button>
+        <button id="btn-advanced" title="Advanced settings" onclick="toggleAdvanced()">⚙</button>
+        <button id="btn-stop" title="Stop">■</button>
+        <button id="btn-send" title="Send (Enter)">↑</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden mode select (for JS compat) -->
+  <select id="mode-select" style="display:none" onchange="setMode(this.value)">
+    <option value="fast">⚡ Fast</option>
+    <option value="plan">📋 Plan</option>
+  </select>
+
+  <!-- Advanced settings panel -->
+  <div id="advanced-panel">
+    <!-- Shell presets -->
+    <div class="adv-row" style="align-items:flex-start">
+      <span class="adv-label" style="margin-top:4px">🛠 Shell tools</span>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;flex:1">
+        <label class="preset-chip" title="Allow git commands"><input type="checkbox" id="preset-git"> git</label>
+        <label class="preset-chip" title="Allow npm/npx"><input type="checkbox" id="preset-npm"> npm</label>
+        <label class="preset-chip" title="Allow pytest"><input type="checkbox" id="preset-pytest"> pytest</label>
+        <label class="preset-chip" title="Web search via curl + Tavily"><input type="checkbox" id="preset-curl" onchange="onCurlToggle()"> 🌐 web</label>
+        <label class="preset-chip" title="Allow ALL shell commands"><input type="checkbox" id="preset-all"> all</label>
+      </div>
+    </div>
+    <!-- Tavily key (shown when curl checked) -->
+    <div class="adv-row" id="adv-key-row" style="display:none">
+      <span class="adv-label" style="color:var(--fg-muted);font-size:10px">Tavily key</span>
+      <input id="adv-tavily-key" class="adv-input" type="password"
+        placeholder="tvly-… (saved to settings)" style="flex:1" title="Get a free key at tavily.com" />
+      <button id="adv-save-key" onclick="saveTavilyKey()"
+        style="background:none;border:1px solid var(--border);color:var(--fg-muted);cursor:pointer;padding:2px 7px;border-radius:4px;font-family:var(--font);font-size:10px;white-space:nowrap;">Save</button>
+    </div>
+    <div class="adv-sep"></div>
+    <!-- Max turns -->
+    <div class="adv-row">
+      <span class="adv-label">🔄 Max turns</span>
+      <input id="adv-max-turns" class="adv-input adv-input-sm" type="number"
+        min="1" max="100" placeholder="∞" title="Max agent turns" />
+      <span class="adv-hint">blank = unlimited</span>
+    </div>
+    <div class="adv-sep"></div>
+    <!-- Agent name -->
+    <div class="adv-row">
+      <span class="adv-label">🤖 Agent name</span>
+      <input id="adv-agent-name" class="adv-input" type="text" placeholder="e.g. coder" />
+    </div>
+    <div class="adv-sep"></div>
+    <!-- Skills -->
+    <div class="adv-row" style="align-items:flex-start">
+      <span class="adv-label" style="margin-top:5px">🧩 Skills</span>
+      <div class="adv-tag-wrap" id="skills-wrap" onclick="document.getElementById('skill-input').focus()">
+        <input id="skill-input" class="adv-tag-input" placeholder="Add skill, Enter to add…" />
+      </div>
+    </div>
+    <div class="adv-sep"></div>
+    <!-- MCP config -->
+    <div class="adv-row" style="align-items:flex-start">
+      <span class="adv-label" style="margin-top:4px">🔌 MCP config</span>
+      <div style="flex:1;display:flex;flex-direction:column;gap:3px">
+        <textarea id="adv-mcp-json" class="adv-input" rows="3" placeholder='{"mcpServers":{"name":{"command":"npx","args":["-y","@mcp/server"]}}}' style="height:56px;resize:vertical;font-family:var(--mono);font-size:10px;" oninput="validateMcpJson()"></textarea>
+        <span id="adv-mcp-status" class="adv-hint"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Resume session badge -->
+  <div id="resume-badge">
+    <span>🔄 Resuming session</span>
+    <span id="resume-id" style="font-family:var(--mono);font-size:10px"></span>
+    <button onclick="clearResume()" title="Cancel resume">✕</button>
+  </div>
+
+  <div id="input-hint">Enter to send · Shift+Enter for new line</div>
+</div>
+
+<script>
+const vscode = acquireVsCodeApi();
+const messagesEl    = document.getElementById('messages');
+const emptyState    = document.getElementById('empty-state');
+const input         = document.getElementById('prompt-input');
+const btnSend       = document.getElementById('btn-send');
+const btnStop       = document.getElementById('btn-stop');
+const btnNew        = document.getElementById('btn-new-session');
+const modelSelect   = document.getElementById('model-select');
+const btnRefresh    = document.getElementById('btn-refresh-models');
+const statusDot     = document.getElementById('status-dot');
+const offlineBanner = document.getElementById('offline-banner');
+const offlineMsg    = document.getElementById('offline-msg');
+const setupBanner   = document.getElementById('setup-banner');
+const ctxBar        = document.getElementById('ctx-bar');
+// ctx-name removed — multi-file bar uses renderContextBar()
+const scrollBtn     = document.getElementById('scroll-btn');
+const tbPills       = document.getElementById('tb-pills');
+const modelLabel    = document.getElementById('tb-model-label');
+
+let mode = 'fast';
+let isRunning = false;
+let currentModel = '';
+let currentAgentTurn = null;
+let currentAgentContent = null;
+let currentPlan = null;
+let thinkingEl = null;
+let startTime = 0;
+let selectedContext = null; // { fileName, code }
+let contextFiles = []; // [{ path, content }]
+let autoScroll = true;
+let pendingResumeId = null;
+
+// ── Textarea resize ──
+input.addEventListener('input', () => {
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+});
+input.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+
+btnSend.addEventListener('click', sendMessage);
+btnStop.addEventListener('click', () => vscode.postMessage({ type: 'stop' }));
+btnNew.addEventListener('click', () => vscode.postMessage({ type: 'new_session' }));
+btnRefresh.addEventListener('click', () => vscode.postMessage({ type: 'refresh_models' }));
+modelSelect.addEventListener('change', () => {
+  currentModel = modelSelect.value;
+  updateModelLabel();
+  vscode.postMessage({ type: 'set_model', model: currentModel });
+});
+
+function updateModelLabel() {
+  if (modelLabel) {
+    const name = currentModel.split(':')[0]; // compact name
+    modelLabel.innerHTML = `${escHtml(name)} <span class="chevron-sm">▾</span>`;
+  }
+}
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('mode-select').value = m;
+  const btn = document.getElementById('tb-mode');
+  if (btn) {
+    btn.textContent = m === 'fast' ? '⚡ Fast' : '📋 Plan';
+    btn.classList.toggle('active', true); // or just keep it active
+  }
+  vscode.postMessage({ type: 'set_mode', mode: m });
+}
+
+function toggleMode() {
+  const next = mode === 'fast' ? 'plan' : 'fast';
+  setMode(next);
+}
+
+function addEditorSelection() {
+  vscode.postMessage({ type: 'add_selection_to_context' });
+}
+
+// ── Advanced settings ──
+const advancedPanel = document.getElementById('advanced-panel');
+const btnAdvanced   = document.getElementById('btn-advanced');
+const skills = [];  // current skill tags
+
+function toggleAdvanced() {
+  const open = advancedPanel.classList.toggle('open');
+  const btn = document.getElementById('btn-advanced');
+  if (btn) btn.classList.toggle('active', open);
+}
+
+function onCurlToggle() {
+  const on = document.getElementById('preset-curl').checked;
+  document.getElementById('adv-key-row').style.display = on ? 'flex' : 'none';
+}
+
+function saveTavilyKey() {
+  const key = document.getElementById('adv-tavily-key').value.trim();
+  vscode.postMessage({ type: 'save_tavily_key', key });
+  const btn = document.getElementById('adv-save-key');
+  btn.textContent = '✓ Saved';
+  btn.style.color = 'var(--success)';
+  btn.style.borderColor = 'var(--success)';
+  setTimeout(() => { btn.textContent = 'Save'; btn.style.color = ''; btn.style.borderColor = ''; }, 1800);
+}
+
+function validateMcpJson() {
+  const val = document.getElementById('adv-mcp-json').value.trim();
+  const el = document.getElementById('adv-mcp-status');
+  if (!val) { el.textContent = ''; return; }
+  try { JSON.parse(val); el.textContent = '✓ valid JSON'; el.style.color = 'var(--success)'; }
+  catch { el.textContent = '✗ invalid JSON'; el.style.color = 'var(--error)'; }
+}
+
+// Skill tag input
+document.getElementById('skill-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    const val = e.target.value.trim().replace(/,/g, '');
+    if (val && !skills.includes(val)) { addSkillTag(val); }
+    e.target.value = '';
+  } else if (e.key === 'Backspace' && !e.target.value && skills.length) {
+    removeSkillTag(skills[skills.length - 1]);
+  }
+});
+
+function addSkillTag(name) {
+  skills.push(name);
+  const wrap = document.getElementById('skills-wrap');
+  const tag = document.createElement('span');
+  tag.className = 'adv-tag';
+  tag.dataset.skill = name;
+  tag.innerHTML = `${name}<button onclick="removeSkillTag('${name}')" title="Remove">✕</button>`;
+  wrap.insertBefore(tag, document.getElementById('skill-input'));
+}
+
+function removeSkillTag(name) {
+  const idx = skills.indexOf(name);
+  if (idx >= 0) skills.splice(idx, 1);
+  document.querySelector(`.adv-tag[data-skill="${CSS.escape(name)}"]`)?.remove();
+}
+
+function getAgentOpts() {
+  const presets = ['git','npm','pytest','curl','all'].filter(p => document.getElementById('preset-'+p)?.checked);
+  const webSearch = presets.includes('curl') || presets.includes('all');
+  const tavilyApiKey = document.getElementById('adv-tavily-key').value.trim() || undefined;
+  const maxTurnsVal = parseInt(document.getElementById('adv-max-turns').value, 10);
+  const maxTurns = isNaN(maxTurnsVal) || maxTurnsVal <= 0 ? undefined : maxTurnsVal;
+  const agentName = document.getElementById('adv-agent-name').value.trim() || undefined;
+  const skillsCopy = skills.length ? [...skills] : undefined;
+  const shellPresets = presets.length ? presets : undefined;
+  let mcpConfig = undefined;
+  try {
+    const raw = document.getElementById('adv-mcp-json').value.trim();
+    if (raw) mcpConfig = JSON.parse(raw);
+  } catch { /* invalid JSON — skip */ }
+  const resumeThreadId = pendingResumeId || undefined;
+  return { webSearch: webSearch || undefined, tavilyApiKey, maxTurns, agentName, skills: skillsCopy, shellPresets, mcpConfig, resumeThreadId };
+}
+
+function fillPrompt(text) {
+  input.value = text;
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+  input.focus();
+}
+
+function runTemplate(text) {
+  if (isRunning) return;
+  input.value = text;
+  sendMessage(); // auto-run immediately
+}
+
+// ── Scroll lock ──
+messagesEl.addEventListener('scroll', () => {
+  const atBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 60;
+  autoScroll = atBottom;
+  scrollBtn.style.display = atBottom ? 'none' : 'flex';
+});
+
+function buildFullPrompt(text) {
+  let ctx = '';
+  if (selectedContext) {
+    ctx += `Context from ${selectedContext.fileName}:\n\`\`\`\n${selectedContext.code}\n\`\`\`\n\n`;
+  }
+  for (const f of contextFiles) {
+    ctx += `File: ${f.path}\n\`\`\`\n${f.content}\n\`\`\`\n\n`;
+  }
+  return ctx + text;
+}
+
+function sendMessage() {
+  const text = input.value.trim();
+  if (!text || isRunning) return;
+  const fullText = buildFullPrompt(text);
+  appendUserMessage(text);
+  hideEmpty();
+  input.value = '';
+  input.style.height = 'auto';
+  setRunning(true);
+  currentAgentTurn = null;
+  currentAgentContent = null;
+  currentPlan = null;
+  startTime = Date.now();
+  vscode.postMessage({ type: 'send_message', text: fullText, mode, opts: getAgentOpts() });
+}
+
+function dismissSetup() { setupBanner.classList.remove('visible'); }
+
+function clearAllContext() {
+  selectedContext = null;
+  contextFiles = [];
+  renderContextBar();
+  input.placeholder = 'Ask Deep Agent anything...';
+}
+
+function clearContext() { clearAllContext(); }
+
+function addContextFiles(files) {
+  for (const f of files) {
+    if (!contextFiles.find(x => x.path === f.path)) contextFiles.push(f);
+  }
+  renderContextBar();
+}
+
+function removeContextFile(filePath) {
+  contextFiles = contextFiles.filter(f => f.path !== filePath);
+  renderContextBar();
+}
+
+function renderContextBar() {
+  if (!tbPills) return;
+  tbPills.innerHTML = '';
+  
+  if (selectedContext) {
+    const pill = document.createElement('div');
+    pill.className = 'tb-file-pill';
+    pill.innerHTML = `
+      <span class="pill-icon">📄</span>
+      <span class="pill-name">${escHtml(selectedContext.fileName)}</span>
+      <button class="pill-close" onclick="(function(){selectedContext=null;renderContextBar();})()" title="Remove">✕</button>
+    `;
+    tbPills.appendChild(pill);
+  }
+  
+  for (const f of contextFiles) {
+    const pill = document.createElement('div');
+    pill.className = 'tb-file-pill';
+    const name = f.path.split('/').pop();
+    pill.title = f.path;
+    pill.innerHTML = `
+      <span class="pill-icon">📎</span>
+      <span class="pill-name" title="${escHtml(f.path)}">${escHtml(name)}</span>
+      <button class="pill-close" onclick="removeContextFile('${f.path.replace(/'/g,"\\'")}')">✕</button>
+    `;
+    tbPills.appendChild(pill);
+  }
+  
+  // Context size warning
+  const totalSize = (selectedContext?.code?.length ?? 0) + contextFiles.reduce((s, f) => s + f.content.length, 0);
+  if (totalSize > 50000) {
+    const warn = document.createElement('span');
+    warn.className = 'tb-ctx-warn';
+    warn.textContent = '⚠ large context';
+    tbPills.appendChild(warn);
+  }
+}
+
+function hideEmpty() { emptyState.style.display = 'none'; }
+function scrollBottom() { autoScroll = true; scrollBtn.style.display = 'none'; messagesEl.scrollTop = messagesEl.scrollHeight; }
+function autoScrollBottom() { if (autoScroll) messagesEl.scrollTop = messagesEl.scrollHeight; }
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function appendUserMessage(text) {
+  const d = document.createElement('div');
+  d.className = 'msg-user';
+  d.innerHTML = `<div class="role">You</div><div class="bubble">${escHtml(text)}</div>`;
+  messagesEl.appendChild(d);
+  scrollBottom();
+}
+
+function ensureAgentTurn() {
+  if (!currentAgentTurn) {
+    currentAgentTurn = document.createElement('div');
+    currentAgentTurn.className = 'msg-agent';
+    const roleRow = document.createElement('div');
+    roleRow.style.cssText = 'display:flex;align-items:center;gap:4px';
+    roleRow.innerHTML = '<span class="role">Deep Agent</span>';
+    // Copy button
+    const copyBtn = document.createElement('button');
+    copyBtn.className = 'copy-btn';
+    copyBtn.textContent = 'copy';
+    copyBtn.onclick = () => {
+      const txt = currentAgentTurn.querySelectorAll('.agent-text');
+      const combined = Array.from(txt).map(el => el.textContent).join('\n');
+      navigator.clipboard.writeText(combined).then(() => {
+        copyBtn.textContent = '✓ copied';
+        copyBtn.classList.add('copied');
+        setTimeout(() => { copyBtn.textContent = 'copy'; copyBtn.classList.remove('copied'); }, 1500);
+      });
+    };
+    currentAgentTurn.appendChild(roleRow);
+    currentAgentTurn.appendChild(copyBtn);
+    currentAgentContent = document.createElement('div');
+    currentAgentContent.className = 'agent-content';
+    currentAgentTurn.appendChild(currentAgentContent);
+    removeThinking();
+    messagesEl.appendChild(currentAgentTurn);
+  }
+  return currentAgentContent;
+}
+
+function appendAgentText(text) {
+  const c = ensureAgentTurn();
+  const last = c.lastElementChild;
+  if (last && last.classList.contains('agent-text')) {
+    last.textContent += '\n' + text;
+  } else {
+    const p = document.createElement('div');
+    p.className = 'agent-text';
+    p.textContent = text;
+    c.appendChild(p);
+  }
+  autoScrollBottom();
+}
+
+function extractFilePath(args) {
+  if (!args) return null;
+  const m = args.match(/"?path"?\s*[=:]\s*"?([^",\n\r}]+)"?/i)
+           || args.match(/^([^\s{}"]+\.\w+)/);
+  return m ? m[1].trim() : null;
+}
+
+function appendToolCard(toolName, args, oldContent, newContent) {
+  const c = ensureAgentTurn();
+  const isRead = /read_file|read file|cat\b/i.test(toolName);
+  const isWrite = /write_file|edit_file|create_file|str_replace|write file|edit file/i.test(toolName);
+
+  if (isRead) {
+    const filePath = extractFilePath(args) || toolName;
+    const card = document.createElement('div');
+    card.className = 'read-card';
+    card.title = 'Click to open file';
+    card.innerHTML = `
+      <span class="read-icon">📂</span>
+      <div style="display:flex;flex-direction:column;gap:1px;min-width:0">
+        <span class="read-label">Reading file</span>
+        <span class="read-name">${escHtml(filePath)}</span>
+      </div>
+      <span class="read-open">↗ open</span>`;
+    card.onclick = () => vscode.postMessage({ type: 'open_file', path: filePath });
+    c.appendChild(card);
+    scrollBottom();
+    return;
+  }
+
+  if (isWrite) {
+    // Route to diff card
+    let filePath = extractFilePath(args) || '';
+    try { const parsed = JSON.parse(args); filePath = parsed.path ?? parsed.file_path ?? filePath; } catch {}
+    appendDiffCard(toolName, args, oldContent ?? '', newContent ?? '', filePath);
+    return;
+  }
+
+  // ── Generic tool card ──
+  const card = document.createElement('div');
+  card.className = 'tool-card';
+  const hdr = document.createElement('div');
+  hdr.className = 'tool-card-header';
+  hdr.innerHTML = `<span>🔧</span><span>${escHtml(toolName)}</span><span class="chevron">▼</span>`;
+  const body = document.createElement('div');
+  body.className = 'tool-card-body';
+  if (args) body.textContent = args;
+  hdr.onclick = () => { hdr.classList.toggle('open'); body.classList.toggle('open'); };
+  card.appendChild(hdr);
+  if (args) card.appendChild(body);
+  c.appendChild(card);
+  autoScrollBottom();
+}
+
+function appendErrorMessage(text) {
+  const d = document.createElement('div');
+  d.className = 'msg-agent';
+  d.innerHTML = `<div class="role" style="color:var(--error)">Error</div>`;
+  const c = document.createElement('div');
+  c.className = 'agent-content';
+  const t = document.createElement('div');
+  t.className = 'error-text';
+  t.textContent = text;
+  c.appendChild(t);
+  d.appendChild(c);
+  messagesEl.appendChild(d);
+  scrollBottom();
+}
+
+// ── Diff display ──
+function computeLineDiff(oldText, newText) {
+  const a = (oldText || '').split('\n');
+  const b = (newText || '').split('\n');
+  // Cap at 500 lines to avoid O(n*m) performance issues
+  if (a.length > 500 || b.length > 500) {
+    return b.map(t => ({ type: 'add', text: t }));
+  }
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => new Int32Array(n + 1));
+  for (let i = m - 1; i >= 0; i--)
+    for (let j = n - 1; j >= 0; j--)
+      dp[i][j] = a[i] === b[j] ? 1 + dp[i+1][j+1] : Math.max(dp[i+1][j], dp[i][j+1]);
+  const hunks = [];
+  let i = 0, j = 0;
+  while (i < m || j < n) {
+    if (i < m && j < n && a[i] === b[j]) { hunks.push({ type: 'ctx', text: a[i] }); i++; j++; }
+    else if (j < n && (i >= m || dp[i][j+1] >= dp[i+1][j])) { hunks.push({ type: 'add', text: b[j] }); j++; }
+    else { hunks.push({ type: 'del', text: a[i] }); i++; }
+  }
+  return hunks;
+}
+
+function renderDiffHunks(hunks) {
+  // Only show changed lines + 2 context lines around each change
+  const CTX = 2;
+  const changed = new Set();
+  hunks.forEach((h, i) => { if (h.type !== 'ctx') { for (let k = Math.max(0, i-CTX); k <= Math.min(hunks.length-1, i+CTX); k++) changed.add(k); } });
+  let html = '';
+  let skipped = false;
+  for (let i = 0; i < hunks.length; i++) {
+    if (!changed.has(i)) { if (!skipped) { html += `<div class="diff-line" style="color:#444;font-size:10px"><span class="diff-prefix"> </span><span>···</span></div>`; skipped = true; } continue; }
+    skipped = false;
+    const h = hunks[i];
+    const cls = h.type === 'add' ? ' diff-line-add' : h.type === 'del' ? ' diff-line-del' : '';
+    const pfx = h.type === 'add' ? '+' : h.type === 'del' ? '-' : ' ';
+    const col = h.type === 'add' ? 'var(--success)' : h.type === 'del' ? 'var(--error)' : 'var(--fg-muted)';
+    const fg = h.type === 'ctx' ? 'var(--fg-muted)' : 'var(--fg)';
+    html += `<div class="diff-line${cls}"><span class="diff-prefix" style="color:${col}">${pfx}</span><span style="color:${fg}">${escHtml(h.text)}</span></div>`;
+  }
+  return html;
+}
+
+function appendDiffCard(toolName, rawArgs, oldContent, newContent, filePath) {
+  const c = ensureAgentTurn();
+  const hunks = computeLineDiff(oldContent, newContent);
+  const added = hunks.filter(h => h.type === 'add').length;
+  const deleted = hunks.filter(h => h.type === 'del').length;
+  const isNew = !oldContent;
+
+  const card = document.createElement('div');
+  card.className = 'diff-card';
+
+  const hdr = document.createElement('div');
+  hdr.className = 'diff-header';
+  hdr.innerHTML = `
+    <span>📝</span>
+    <span class="diff-path">${escHtml(filePath || toolName)}</span>
+    ${isNew ? '<span class="diff-new-badge">new file</span>' : `<span class="diff-stats"><span class="diff-add-stat">+${added}</span><span class="diff-del-stat">-${deleted}</span></span>`}
+    <button class="diff-open-btn" title="Open file">↗</button>
+    <span style="color:var(--fg-muted);font-size:9px;margin-left:4px">▼</span>`;
+  hdr.querySelector('.diff-open-btn').onclick = e => { e.stopPropagation(); vscode.postMessage({ type: 'open_file', path: filePath }); };
+
+  const body = document.createElement('div');
+  body.className = 'diff-body';
+  body.innerHTML = renderDiffHunks(hunks) || `<div class="diff-line"><span style="color:var(--fg-muted)">No changes</span></div>`;
+
+  hdr.onclick = () => { body.classList.toggle('open'); };
+  card.appendChild(hdr);
+  card.appendChild(body);
+  c.appendChild(card);
+  autoScrollBottom();
+}
+
+// ── Approval card ──
+function appendApprovalCard(text, id) {
+  const c = ensureAgentTurn();
+  const card = document.createElement('div');
+  card.className = 'approval-card';
+  card.id = 'appr_' + id;
+  card.innerHTML = `
+    <div class="approval-header">
+      <span>⚡</span>
+      <span class="approval-tool">${escHtml(text.replace(/\[y\/n\].*$/i, '').trim())}</span>
+      <span class="approval-badge">needs approval</span>
+    </div>
+    <div class="approval-actions" id="appr-actions-${id}">
+      <button class="btn btn-primary" style="font-size:11px" onclick="doApprove('${id}')">✓ Allow</button>
+      <button class="btn btn-danger" style="font-size:11px" onclick="doDeny('${id}')">✕ Deny</button>
+    </div>`;
+  c.appendChild(card);
+  scrollBottom();
+}
+
+function doApprove(id) {
+  vscode.postMessage({ type: 'approve_tool', id });
+  const el = document.getElementById('appr-actions-' + id);
+  if (el) el.innerHTML = '<span style="color:var(--success);font-size:11px;padding:2px 4px">✓ Allowed</span>';
+}
+function doDeny(id) {
+  vscode.postMessage({ type: 'deny_tool', id });
+  const el = document.getElementById('appr-actions-' + id);
+  if (el) el.innerHTML = '<span style="color:var(--error);font-size:11px;padding:2px 4px">✕ Denied</span>';
+}
+
+// ── Terminal output card ──
+let currentTerminalCard = null;
+let currentTerminalBody = null;
+
+function appendTerminalLine(text) {
+  if (!currentTerminalCard) {
+    const c = ensureAgentTurn();
+    currentTerminalCard = document.createElement('div');
+    currentTerminalCard.className = 'terminal-card';
+    const hdr = document.createElement('div');
+    hdr.className = 'terminal-header';
+    hdr.innerHTML = `<span>>_</span><span style="flex:1">Terminal output</span><span style="font-size:9px">▼</span>`;
+    currentTerminalBody = document.createElement('div');
+    currentTerminalBody.className = 'terminal-body open';
+    hdr.onclick = () => currentTerminalBody.classList.toggle('open');
+    currentTerminalCard.appendChild(hdr);
+    currentTerminalCard.appendChild(currentTerminalBody);
+    c.appendChild(currentTerminalCard);
+  }
+  const line = document.createElement('div');
+  line.className = 'terminal-line' +
+    (/PASSED|✓|\d+ passed/.test(text) ? ' pass' : /FAILED|ERROR|✗/.test(text) ? ' fail' : /WARN/.test(text) ? ' warn' : '');
+  line.textContent = text;
+  currentTerminalBody.appendChild(line);
+  autoScrollBottom();
+}
+
+// ── Session picker ──
+function openSessionPicker() {
+  document.getElementById('session-overlay').classList.add('open');
+  document.getElementById('session-list').innerHTML = '<div class="session-empty">Loading…</div>';
+  vscode.postMessage({ type: 'list_threads' });
+}
+
+function closeSessionPicker() {
+  document.getElementById('session-overlay').classList.remove('open');
+}
+
+function renderSessionList(threads) {
+  const list = document.getElementById('session-list');
+  if (!threads || !threads.length) {
+    list.innerHTML = '<div class="session-empty">No previous sessions found.</div>';
+    return;
+  }
+  list.innerHTML = '';
+  for (const t of threads) {
+    const item = document.createElement('div');
+    item.className = 'session-item';
+    item.innerHTML = `
+      <div class="session-id">${escHtml(t.id)}</div>
+      <div class="session-date">${escHtml(t.created)}</div>
+      ${t.snippet ? `<div class="session-snippet">${escHtml(t.snippet)}</div>` : ''}`;
+    item.onclick = () => { selectSession(t.id); closeSessionPicker(); };
+    list.appendChild(item);
+  }
+}
+
+function selectSession(id) {
+  pendingResumeId = id;
+  const badge = document.getElementById('resume-badge');
+  badge.classList.add('visible');
+  document.getElementById('resume-id').textContent = id.slice(0, 12) + '…';
+}
+
+function clearResume() {
+  pendingResumeId = null;
+  document.getElementById('resume-badge').classList.remove('visible');
+}
+
+function appendPlanOpeningNotice() {
+  hideEmpty();
+  const d = document.createElement('div');
+  d.className = 'msg-agent';
+  d.innerHTML = `<div class="role" style="color:var(--cyan)">Plan</div>`;
+  const c = document.createElement('div');
+  c.className = 'agent-content';
+  c.innerHTML = `<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;background:rgba(57,208,216,0.08);border:1px solid rgba(57,208,216,0.25);border-radius:8px;color:var(--cyan);font-size:13px;">
+    <span style="font-size:16px;">📋</span>
+    <span>Plan opened in editor — review, edit steps &amp; feedback, then click <strong>Approve &amp; Run</strong> or <strong>Revise Plan</strong>.</span>
+  </div>`;
+  d.appendChild(c);
+  messagesEl.appendChild(d);
+  scrollBottom();
+}
+
+// ── Plan ──
+function renderPlan(steps) {
+  const c = ensureAgentTurn();
+  const box = document.createElement('div');
+  box.className = 'plan-container';
+  box.innerHTML = `
+    <div class="plan-header">📋 Plan <span style="color:var(--fg-muted);font-weight:400;font-size:11px">(${steps.length} steps)</span></div>
+    <div class="plan-steps" id="plan-steps"></div>
+    <div class="plan-progress" style="display:none" id="plan-prog">
+      <div class="progress-track"><div class="progress-fill" id="plan-bar" style="width:0%"></div></div>
+      <div class="progress-label" id="plan-lbl">0 of ${steps.length} done</div>
+    </div>
+    <div class="plan-actions" id="plan-acts">
+      <button class="btn btn-primary" onclick="approvePlan()">▶ Approve & Run</button>
+      <button class="btn btn-secondary" onclick="editPlan()">✎ Edit</button>
+      <button class="btn btn-danger" onclick="cancelPlan()">✕ Cancel</button>
+      <button class="plan-md-btn" onclick="openPlanMd()">⬡ Open as MD</button>
+    </div>`;
+  const stepsEl = box.querySelector('#plan-steps');
+  const stepEls = steps.map((s, i) => {
+    const el = document.createElement('div');
+    el.className = 'plan-step pending';
+    el.innerHTML = `<span class="step-icon" style="color:var(--fg-muted)">○</span><span class="step-text">${escHtml(s)}</span>`;
+    stepsEl.appendChild(el);
+    return el;
+  });
+  c.appendChild(box);
+  scrollBottom();
+  currentPlan = { steps, stepEls, box, total: steps.length, done: 0 };
+}
+
+function updatePlanStep(idx, status) {
+  if (!currentPlan || idx >= currentPlan.stepEls.length) return;
+  const el = currentPlan.stepEls[idx];
+  const icon = el.querySelector('.step-icon');
+  const txt  = el.querySelector('.step-text');
+  el.className = 'plan-step ' + status;
+  if (status === 'in_progress') { icon.className='step-icon running'; icon.textContent='⟳'; icon.style.color='var(--accent)'; }
+  else if (status === 'completed') {
+    icon.className='step-icon'; icon.textContent='✓'; icon.style.color='var(--success)';
+    txt.classList.add('done');
+    currentPlan.done++;
+    const pct = Math.round(currentPlan.done/currentPlan.total*100);
+    const bar = currentPlan.box.querySelector('#plan-bar');
+    const lbl = currentPlan.box.querySelector('#plan-lbl');
+    const prog = currentPlan.box.querySelector('#plan-prog');
+    if (bar) bar.style.width = pct+'%';
+    if (lbl) lbl.textContent = `${currentPlan.done} of ${currentPlan.total} done`;
+    if (prog) prog.style.display = 'block';
+  } else if (status === 'error') { icon.textContent='✕'; icon.style.color='var(--error)'; }
+  scrollBottom();
+}
+
+function approvePlan() {
+  const acts = currentPlan?.box?.querySelector('#plan-acts');
+  if (acts) acts.innerHTML = '<span style="color:var(--accent);font-size:11px;padding:2px 0">▶ Executing...</span>';
+  vscode.postMessage({ type: 'approve_plan', steps: currentPlan?.steps });
+}
+function editPlan() {
+  if (!currentPlan) return;
+  input.value = currentPlan.steps.map((s,i)=>`${i+1}. ${s}`).join('\n');
+  input.style.height = 'auto';
+  input.style.height = Math.min(input.scrollHeight, 120)+'px';
+  input.focus();
+  const acts = currentPlan.box.querySelector('#plan-acts');
+  if (acts) acts.innerHTML = '<span style="color:var(--fg-muted);font-size:11px">Edit above and resend</span>';
+}
+function cancelPlan() {
+  vscode.postMessage({ type: 'stop' });
+  const acts = currentPlan?.box?.querySelector('#plan-acts');
+  if (acts) acts.innerHTML = '<span style="color:var(--error);font-size:11px">✕ Cancelled</span>';
+}
+
+function openPlanMd() {
+  if (!currentPlan) return;
+  const md = `# Deep Agent Plan\n\n` +
+    currentPlan.steps.map((s, i) => `- [ ] **Step ${i+1}:** ${s}`).join('\n');
+  vscode.postMessage({ type: 'open_plan_md', content: md });
+}
+
+// ── Thinking ──
+function showThinking() {
+  if (thinkingEl) return;
+  thinkingEl = document.createElement('div');
+  thinkingEl.className = 'msg-agent';
+  thinkingEl.innerHTML = `
+    <div class="role">Deep Agent</div>
+    <div class="thinking-row">
+      <div class="dots"><span></span><span></span><span></span></div>
+      <span>Thinking...</span>
+    </div>`;
+  messagesEl.appendChild(thinkingEl);
+  scrollBottom();
+}
+function removeThinking() { if (thinkingEl) { thinkingEl.remove(); thinkingEl=null; } }
+
+function setRunning(v) {
+  isRunning = v;
+  btnSend.disabled = v;
+  btnSend.style.display = v ? 'none' : 'flex';
+  btnStop.style.display = v ? 'flex' : 'none';
+  if (v) {
+    showThinking();
+  } else {
+    removeThinking();
+    // Show elapsed time on the agent turn role row
+    if (currentAgentTurn && startTime) {
+      const ms = Date.now() - startTime;
+      const sec = (ms / 1000).toFixed(1);
+      const roleRow = currentAgentTurn.querySelector('.role');
+      if (roleRow && !roleRow.querySelector('.timer-badge')) {
+        const badge = document.createElement('span');
+        badge.className = 'timer-badge';
+        badge.textContent = `${sec}s`;
+        roleRow.appendChild(badge);
+      }
+    }
+  }
+}
+
+// ── VS Code messages ──
+window.addEventListener('message', e => {
+  const msg = e.data;
+  switch (msg.type) {
+    case 'init':
+      currentModel = msg.model;
+      if (msg.mode) {
+        mode = msg.mode;
+        document.getElementById('mode-select').value = msg.mode;
+        const tbMode = document.getElementById('tb-mode');
+        if (tbMode) {
+          tbMode.textContent = mode === 'fast' ? '⚡ Fast' : '📋 Plan';
+        }
+      }
+      if (msg.needsSetup) setupBanner.classList.add('visible');
+      break;
+
+    case 'init_tavily':
+      if (msg.tavilyApiKey) {
+        document.getElementById('adv-tavily-key').value = msg.tavilyApiKey;
+        updateSearchStatus();
+      }
+      break;
+
+    case 'selected_code':
+      selectedContext = { fileName: msg.fileName, code: msg.code };
+      renderContextBar();
+      input.placeholder = `Ask about ${msg.fileName}...`;
+      input.focus();
+      break;
+    case 'ollama_status':
+      statusDot.className = 'status-dot ' + msg.status;
+      offlineBanner.style.display = msg.status === 'offline' ? 'flex' : 'none';
+      if (msg.status === 'offline') offlineMsg.textContent = msg.message || 'Ollama offline';
+      if (msg.models) populateModels(msg.models);
+      break;
+    case 'agent_thinking':
+      hideEmpty(); setRunning(true);
+      break;
+    case 'agent_message': {
+      const m = msg.message;
+      if (m.type === 'output' && m.content) { removeThinking(); appendAgentText(m.content); }
+      else if (m.type === 'tool_call') { removeThinking(); appendToolCard(m.toolName, m.toolInput, m.oldContent, m.newContent); }
+      else if (m.type === 'approval_request') { removeThinking(); appendApprovalCard(m.content, m.id); }
+      else if (m.type === 'terminal_output') { removeThinking(); appendTerminalLine(m.content); }
+      else if (m.type === 'plan') { removeThinking(); renderPlan(m.steps); }
+      else if (m.type === 'plan_opening') { removeThinking(); appendPlanOpeningNotice(); }
+      else if (m.type === 'plan_step') { updatePlanStep(m.index, m.status); }
+      else if (m.type === 'error') { removeThinking(); setRunning(false); currentTerminalCard = null; appendErrorMessage(m.content); }
+      else if (m.type === 'done') { setRunning(false); currentTerminalCard = null; }
+      break;
+    }
+    case 'threads_list':
+      renderSessionList(msg.threads);
+      break;
+    case 'context_files_added':
+      addContextFiles(msg.files);
+      break;
+    case 'agent_stopped': setRunning(false); currentTerminalCard = null; break;
+    case 'session_cleared':
+      messagesEl.innerHTML = '';
+      messagesEl.appendChild(emptyState);
+      emptyState.style.display = 'flex';
+      currentAgentTurn=null; currentAgentContent=null; currentPlan=null; currentTerminalCard=null;
+      setRunning(false);
+      clearAllContext();
+      break;
+    case 'model_changed':
+      currentModel = msg.model;
+      const o = modelSelect.querySelector(`option[value="${CSS.escape(msg.model)}"]`);
+      if (o) modelSelect.value = msg.model;
+      break;
+  }
+});
+
+function populateModels(models) {
+  const prev = modelSelect.value || currentModel;
+  modelSelect.innerHTML = '';
+  if (!models.length) { modelSelect.innerHTML = '<option value="">No models found</option>'; return; }
+  const groups = {};
+  for (const m of models) { const g = m.family||'other'; if (!groups[g]) groups[g]=[]; groups[g].push(m); }
+  for (const [fam, list] of Object.entries(groups)) {
+    const grp = document.createElement('optgroup');
+    grp.label = fam.charAt(0).toUpperCase()+fam.slice(1);
+    for (const m of list) {
+      const o = document.createElement('option');
+      o.value = m.name;
+      o.textContent = m.name + (m.size ? ` (${m.size})` : '');
+      grp.appendChild(o);
+    }
+    modelSelect.appendChild(grp);
+  }
+  if (prev && modelSelect.querySelector(`option[value="${prev}"]`)) { modelSelect.value = prev; }
+  else {
+    const pref = ['qwen2.5-coder','codestral','deepseek-coder','gpt-oss','kimi'];
+    for (const p of pref) { const f = models.find(m=>m.name.includes(p)); if (f){modelSelect.value=f.name;break;} }
+  }
+  currentModel = modelSelect.value;
+  updateModelLabel();
+  vscode.postMessage({ type: 'set_model', model: currentModel });
+}
+</script>
+</body>
+</html>
